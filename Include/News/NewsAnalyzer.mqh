@@ -13,7 +13,7 @@
 #include <Arrays/ArrayObj.mqh>
 #include <Trade/SymbolInfo.mqh>
 #include <WebRequest.mqh>
-#include "./Calendar/EconomicCalendar.mqh"
+#include "../Calendar/EconomicCalendar.mqh"
 
 // News source types
 enum ENUM_NEWS_SOURCE {

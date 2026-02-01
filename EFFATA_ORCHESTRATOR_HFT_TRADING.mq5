@@ -83,6 +83,7 @@ input int    InpUpdateFrequencyMs      = 100;    // Update frequency in millisec
 
 // Global objects
 CAgentOrchestrator    *g_Orchestrator;
+CEconomicCalendar     *g_Calendar;
 CMarketExecutionEnv   *g_ExecutionEnv;
 CPatternDetectionEnv  *g_PatternEnv;
 CStrategyEnv          *g_StrategyEnv;
@@ -112,10 +113,9 @@ int OnInit()
 
     g_Browser_Agent = new BrowserAgent();
     g_Browser_Agent->StartBrowser(false);
-    g_Browser_Agent->SStartBrowser();
-    g_Browser_Agent->Login();
     // Initialize global objects
     g_Orchestrator = new CAgentOrchestrator();
+    g_Calendar = new CEconomicCalendar();
     g_ExecutionEnv = new CMarketExecutionEnv(InpMaxDailyLossPercent);
     g_PatternEnv = new CPatternDetectionEnv();
     g_StrategyEnv = new CStrategyEnv();
@@ -186,6 +186,7 @@ void OnDeinit(const int reason)
 
     // Cleanup
     if(CheckPointer(g_Orchestrator) == POINTER_DYNAMIC) delete g_Orchestrator;
+    if(CheckPointer(g_Calendar) == POINTER_DYNAMIC) delete g_Calendar;
     if(CheckPointer(g_ExecutionEnv) == POINTER_DYNAMIC) delete g_ExecutionEnv;
     if(CheckPointer(g_PatternEnv) == POINTER_DYNAMIC) delete g_PatternEnv;
     if(CheckPointer(g_StrategyEnv) == POINTER_DYNAMIC) delete g_StrategyEnv;
@@ -236,6 +237,14 @@ void OnTick()
         g_ExecutionEnv->SelfVerify(g_MarketFeatures);
     }
 
+    // Economic Calendar Monitoring
+    g_Calendar->UpdateCalendar();
+    g_Calendar->NotifyImportantEvents();
+    if(g_Calendar->IsRiskReductionRequired(30)) {
+        // Automatically reduce position sizes or avoid new trades
+        InpRiskPerTradePercent *= 0.5;
+    }
+
     // Risk Monitor
     if(!g_ExecutionEnv->MonitorRiskAndEquity()) {
         return;
@@ -244,7 +253,15 @@ void OnTick()
     // Get Decision from Orchestrator (which uses RL Agent)
     TradeDecision decision = g_Orchestrator->GetTradingDecision(g_MarketFeatures);
 
-    g_Browser_Agent->RequestAnalysis();
+    // Optional AI Analysis from Browser Agent
+    static datetime lastBrowserUpdate = 0;
+    if(TimeCurrent() - lastBrowserUpdate > 3600) { // Once per hour
+        SAnalysisResponse browser_resp;
+        if(g_Browser_Agent->RequestAnalysis(AI_DEEPSEEK, _Symbol, PERIOD_CURRENT, browser_resp)) {
+            Print("🤖 AI Analysis: ", browser_resp.result.reasoning);
+            lastBrowserUpdate = TimeCurrent();
+        }
+    }
 
     // Execution Logic
     if(decision.action != NO_SIGNAL && decision.confidence >= InpConfidenceThreshold) {

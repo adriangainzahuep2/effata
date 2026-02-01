@@ -13,9 +13,10 @@
 #include <Trade/Trade.mqh>
 #include <Arrays/ArrayObj.mqh>
 #include <Math/Stat/Math.mqh>
-#include "/Include/Environments/RiskManagementEnv.mqh"
-#include "/Include/Calendar/EconomicCalendar.mqh"
-#include "/Include/MarketContext/MarketContextAnalyzer.mqh"
+#include "../Environments/RiskManagementEnv.mqh"
+#include "../Calendar/EconomicCalendar.mqh"
+#include "../MarketContext/MarketContextAnalyzer.mqh"
+#include "../Core/AI_JSON_FILE.mqh"
 
 // Model Configuration and Capabilities
 enum ENUM_MODEL_TYPE {
@@ -595,10 +596,11 @@ LLMResponse CLLMOrchestrator::ParseModelResponse(string response, ENUM_MODEL_TYP
 
     // Parse JSON response
     char jsonChars[];
-    StringToCharArray(response, jsonChars);
+    int len = StringToCharArray(response, jsonChars);
+    int index = 0;
 
-    CJsonObject json;
-    if(!json.Deserialize(jsonChars)) {
+    JsonValue json;
+    if(!json.DeserializeFromArray(jsonChars, len, index)) {
         result.action = NO_SIGNAL;
         result.confidence = 0.0;
         result.reasoning = "Failed to parse JSON response: " + response;
@@ -606,18 +608,18 @@ LLMResponse CLLMOrchestrator::ParseModelResponse(string response, ENUM_MODEL_TYP
     }
 
     // Extract action
-    string actionStr = json.GetField("action").AsString();
+    string actionStr = json["action"].ToString();
     result.action = ConvertStringToAction(actionStr);
 
     // Extract confidence
-    result.confidence = (float)json.GetField("confidence").AsDouble();
+    result.confidence = json["confidence"].ToDouble();
 
     // Extract take profit and stop loss
-    result.tpPrice = (float)json.GetField("take_profit").AsDouble();
-    result.slPrice = (float)json.GetField("stop_loss").AsDouble();
+    result.tpPrice = json["take_profit"].ToDouble();
+    result.slPrice = json["stop_loss"].ToDouble();
 
     // Extract reasoning
-    result.reasoning = json.GetField("reasoning").AsString();
+    result.reasoning = json["reasoning"].ToString();
     result.marketContext = m_contextAnalyzer.GetMarketContextSummary();
 
     return result;

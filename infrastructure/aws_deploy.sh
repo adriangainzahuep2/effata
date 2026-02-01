@@ -16,7 +16,24 @@ DB_PASSWORD=${EFFATA_DB_PASSWORD:-$(openssl rand -base64 12)}
 sudo -u postgres psql -c "CREATE DATABASE effata_trading;"
 sudo -u postgres psql -c "CREATE USER effata_admin WITH PASSWORD '$DB_PASSWORD';"
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE effata_trading TO effata_admin;"
-echo "Database setup with generated password."
+
+# Create tables for Trading Journal
+sudo -u postgres psql -d effata_trading -c "
+CREATE TABLE IF NOT EXISTS trading_journal (
+    id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMPTZ DEFAULT NOW(),
+    account_id TEXT,
+    ticket TEXT,
+    symbol TEXT,
+    action INT,
+    lots DOUBLE PRECISION,
+    entry_price DOUBLE PRECISION,
+    profit DOUBLE PRECISION,
+    reasoning TEXT,
+    market_state TEXT
+);"
+
+echo "Database and tables setup with generated password."
 
 # 4. Install MetaTrader 5 (via Wine if needed for Linux, or just preparation for Windows Instance)
 # On Linux:
@@ -36,7 +53,25 @@ DB_PASS=$DB_PASSWORD
 AWS_REGION=us-east-1
 EOF
 
-# 7. Start Services (Python Orchestrator Agents)
-# nohup python3 /opt/effata/Python/main.py > /var/log/effata.log 2>&1 &
+# 7. Start Services (Python Multi-Broker Hub)
+# Create systemd service for EFFATA Data Bridge
+cat <<EOF | sudo tee /etc/systemd/system/effata-hub.service
+[Unit]
+Description=EFFATA Multi-Broker Hub
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/effata/Python/data_bridge.py
+WorkingDirectory=/opt/effata/Python
+Restart=always
+User=ubuntu
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable effata-hub
+sudo systemctl start effata-hub
 
 echo "EFFATA Deployment Completed Successfully!"

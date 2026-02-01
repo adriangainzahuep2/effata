@@ -139,5 +139,15 @@ public:
        }
        return false;
    }
+
+   void NotifyImportantEvents() {
+       EconomicEvent high = GetNextHighImpactEvent("High");
+       if(high.time != 0) {
+           long diff = (long)high.time - (long)TimeCurrent();
+           if(diff > 0 && diff < 3600) {
+               Print("THOR-CALENDAR: [HIGH IMPORTANCE] ", high.title, " in ", diff/60, "m");
+           }
+       }
+   }
 };
 #endif // ECONOMIC_CALENDAR_MQH

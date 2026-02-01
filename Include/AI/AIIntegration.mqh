@@ -13,7 +13,7 @@
 #include <Arrays/ArrayString.mqh>
 #include <Arrays/ArrayDouble.mqh>
 #include <Files/FileTxt.mqh>
-#include "../News/EconomicCalendar.mqh"
+#include "../Calendar/EconomicCalendar.mqh"
 #include "../Core/SocketClient.mqh"
 #include "../Core/AI_JSON_FILE.mqh"
 

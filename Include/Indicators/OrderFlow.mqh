@@ -84,42 +84,26 @@ public:
         MqlTick ticks[];
         int copied = CopyTicksRange(m_symbol, ticks, COPY_TICKS_ALL, bar.time * 1000, next_time * 1000);
 
-        if(copied > 0) {
-            for(int i = 0; i < copied; i++) {
-                double price = ticks[i].last;
-                if(price == 0) price = (ticks[i].bid + ticks[i].ask) / 2.0;
+        if(copied <= 0) return false; // Fail if no real tick data available
 
-                int cell_idx = (int)((price - low) / m_tick_size);
-                if(cell_idx >= 0 && cell_idx < num_cells) {
-                    double vol = (double)ticks[i].volume;
-                    if(vol == 0) vol = (double)ticks[i].volume_real;
-                    if(vol == 0) vol = 1;
+        for(int i = 0; i < copied; i++) {
+            double price = ticks[i].last;
+            if(price == 0) price = (ticks[i].bid + ticks[i].ask) / 2.0;
 
-                    if(ticks[i].last >= ticks[i].ask || (ticks[i].flags & TICK_FLAG_ASK) > 0) { // Aggressive Buy
-                        bar.cells[cell_idx].ask_vol += vol;
-                    } else if(ticks[i].last <= ticks[i].bid || (ticks[i].flags & TICK_FLAG_BID) > 0) { // Aggressive Sell
-                        bar.cells[cell_idx].bid_vol += vol;
-                    } else {
-                        // Distributed if in between
-                        bar.cells[cell_idx].ask_vol += vol * 0.5;
-                        bar.cells[cell_idx].bid_vol += vol * 0.5;
-                    }
-                }
-            }
-        } else {
-            // Fallback to estimation based on bar close if no ticks available
-            double close = iClose(m_symbol, m_period, shift);
-            double open = iOpen(m_symbol, m_period, shift);
-            double total_vol = (double)iTickVolume(m_symbol, m_period, shift);
+            int cell_idx = (int)((price - low) / m_tick_size);
+            if(cell_idx >= 0 && cell_idx < num_cells) {
+                double vol = (double)ticks[i].volume;
+                if(vol == 0) vol = (double)ticks[i].volume_real;
+                if(vol == 0) vol = 1;
 
-            for(int i=0; i<num_cells; i++) {
-                bar.cells[i].total_vol = total_vol / num_cells;
-                if(close > open) { // Bullish bar
-                    bar.cells[i].ask_vol = bar.cells[i].total_vol * 0.6;
-                    bar.cells[i].bid_vol = bar.cells[i].total_vol * 0.4;
+                if(ticks[i].last >= ticks[i].ask || (ticks[i].flags & TICK_FLAG_ASK) > 0) { // Aggressive Buy
+                    bar.cells[cell_idx].ask_vol += vol;
+                } else if(ticks[i].last <= ticks[i].bid || (ticks[i].flags & TICK_FLAG_BID) > 0) { // Aggressive Sell
+                    bar.cells[cell_idx].bid_vol += vol;
                 } else {
-                    bar.cells[i].ask_vol = bar.cells[i].total_vol * 0.4;
-                    bar.cells[i].bid_vol = bar.cells[i].total_vol * 0.6;
+                    // Distributed if in between
+                    bar.cells[cell_idx].ask_vol += vol * 0.5;
+                    bar.cells[cell_idx].bid_vol += vol * 0.5;
                 }
             }
         }

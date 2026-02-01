@@ -62,6 +62,7 @@ struct SAccountConnection {
     int                      current_positions;
     bool                     auto_trading_enabled;
     bool                     copy_enabled;
+    bool                     is_inverse;       // Trade Reversal
     bool                     is_external;      // True for Tradovate/Rithmic etc via bridge
     string                   external_provider; // "tradovate", "dxfeed", etc.
     bool                     is_leader;        // If this account is a master to be copied
@@ -190,7 +191,7 @@ public:
     bool                    Initialize();
     bool                    LoadConfiguration(string config_file);
     bool                    AddAccount(SAccountConnection account);
-    bool                    AddExternalAccount(string account_id, string provider, double multiplier = 1.0, double max_lots = 0.0);
+    bool                    AddExternalAccount(string account_id, string provider, double multiplier = 1.0, double max_lots = 0.0, bool inverse = false);
     bool                    RemoveAccount(string account_id);
     bool                    ConnectAccount(string account_id);
     bool                    DisconnectAccount(string account_id);
@@ -371,7 +372,7 @@ bool CMultiAccountManager::AddAccount(SAccountConnection account) {
 //+------------------------------------------------------------------+
 //| Add External Account                                             |
 //+------------------------------------------------------------------+
-bool CMultiAccountManager::AddExternalAccount(string account_id, string provider, double multiplier, double max_lots) {
+bool CMultiAccountManager::AddExternalAccount(string account_id, string provider, double multiplier, double max_lots, bool inverse) {
     SAccountConnection *new_account = new SAccountConnection();
     ZeroMemory(*new_account);
 
@@ -381,6 +382,7 @@ bool CMultiAccountManager::AddExternalAccount(string account_id, string provider
     new_account->external_provider = provider;
     new_account->copy_multiplier = multiplier;
     new_account->max_lot_size = max_lots;
+    new_account->is_inverse = inverse;
     new_account->status = ACCOUNT_STATUS_CONNECTED; // Assume connected for external
     new_account->copy_enabled = true;
     new_account->auto_trading_enabled = true;
@@ -690,8 +692,20 @@ bool CMultiAccountManager::ExecuteExternalTrade(string account_id, STradeAction 
     string headers = "Content-Type: application/json\r\n";
     string action_str = (action.action_type == 1) ? "Buy" : "Sell";
 
-    string payload = StringFormat("{\"account_id\":\"%s\", \"provider\":\"%s\", \"symbol\":\"%s\", \"action\":\"%s\", \"quantity\":%d}",
-                                 account_id, provider, action.symbol, action_str, (int)(action.lot_size));
+    // Find account to check inverse
+    bool is_inv = false;
+    double max_s = 100.0;
+    for(int i=0; i<m_accounts.Total(); i++) {
+        SAccountConnection *acc = m_accounts.At(i);
+        if(acc.connection_id == account_id) {
+            is_inv = acc.is_inverse;
+            max_s = acc.max_lot_size;
+            break;
+        }
+    }
+
+    string payload = StringFormat("{\"account_id\":\"%s\", \"provider\":\"%s\", \"symbol\":\"%s\", \"action\":\"%s\", \"quantity\":%f, \"is_inverse\":%s, \"max_size_limit\":%f}",
+                                 account_id, provider, action.symbol, action_str, action.lot_size, (is_inv?"true":"false"), max_s);
 
     string url = "http://localhost:8000/execute_trade";
     int res = WebRequest("POST", url, headers, 5000, data, result, headers);
