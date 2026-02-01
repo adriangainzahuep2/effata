@@ -1,0 +1,100 @@
+        // Find number after keyword
+        string number = "";
+        bool foundDigit = false;
+        bool foundDecimal = false;
+
+        for(int i = pos + StringLen(keyword); i < StringLen(text) && i < pos + 50; i++) {
+            ushort c = StringGetCharacter(text, i);
+
+            if(c >= '0' && c <= '9') {
+                number += CharToString((uchar)c);
+                foundDigit = true;
+            } else if((c == '.' || c == ',') && foundDigit && !foundDecimal) {
+                number += ".";
+                foundDecimal = true;
+            } else if(foundDigit) {
+                break;
+            }
+        }
+
+        return StringLen(number) > 0 ? StringToDouble(number) : 0;
+    }
+
+    double ExtractPercentage(string text) {
+        int pos = StringFind(text, "%");
+        if(pos < 0)
+            return 0;
+
+        string number = "";
+        for(int i = pos - 1; i >= 0 && i > pos - 10; i--) {
+            ushort c = StringGetCharacter(text, i);
+            if(c >= '0' && c <= '9') {
+                number = CharToString((uchar)c) + number;
+            } else if(c == '.' || c == ',') {
+                number = "." + number;
+            } else if(StringLen(number) > 0) {
+                break;
+            }
+        }
+
+        return StringLen(number) > 0 ? StringToDouble(number) : 0;
+    }
+
+    string TimeframeToTradingViewInterval(ENUM_TIMEFRAMES tf) {
+        switch(tf) {
+            case PERIOD_M1: return "1";
+            case PERIOD_M5: return "5";
+            case PERIOD_M15: return "15";
+            case PERIOD_M30: return "30";
+            case PERIOD_H1: return "60";
+            case PERIOD_H4: return "240";
+            case PERIOD_D1: return "D";
+            case PERIOD_W1: return "W";
+            case PERIOD_MN1: return "M";
+            default: return "60";
+        }
+    }
+
+    string NormalizeTradingViewSymbol(string symbol) {
+        string result = symbol;
+
+        // Add exchange prefix if needed
+        if(StringFind(result, ":") < 0) {
+            // Check if it's a forex pair
+            if(StringLen(result) == 6) {
+                result = "FX:" + result;
+            }
+        }
+
+        return result;
+    }
+
+    void UpdateMetrics(bool success, int processingTime) {
+        if(m_totalRequests == 1) {
+            m_avgResponseTime = processingTime;
+        } else {
+            m_avgResponseTime = (m_avgResponseTime * (m_totalRequests - 1) +
+                                processingTime) / m_totalRequests;
+        }
+    }
+
+    void Log(string message) {
+        if(!m_loggingEnabled)
+            return;
+
+        string logEntry = TimeToString(TimeCurrent(), TIME_DATE|TIME_MINUTES|TIME_SECONDS);
+        logEntry += " | " + message + "\n";
+
+        if(m_logHandle == INVALID_HANDLE) {
+            m_logHandle = FileOpen(m_logFile, FILE_WRITE|FILE_TXT|FILE_ANSI);
+        }
+
+        if(m_logHandle != INVALID_HANDLE) {
+            FileSeek(m_logHandle, 0, SEEK_END);
+            FileWriteString(m_logHandle, logEntry);
+            FileFlush(m_logHandle);
+        }
+    }
+};
+
+#endif // BROWSERAGENT_MQH

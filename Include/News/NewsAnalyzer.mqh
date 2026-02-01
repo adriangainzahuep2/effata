@@ -14,6 +14,7 @@
 #include <Trade/SymbolInfo.mqh>
 #include <WebRequest.mqh>
 #include "../Calendar/EconomicCalendar.mqh"
+#include "../Core/AI_JSON_FILE.mqh"
 
 // News source types
 enum ENUM_NEWS_SOURCE {
@@ -320,32 +321,23 @@ bool CNewsAnalyzer::ParseNewsApiResponse(string response, NewsSource& source) {
 
         if(events != NULL) {
             for(int i = 0; i < eventCount && i < 10; i++) { // Limit to 10 articles
-                EconomicEvent event = events[i];
+                EconomicEvent* event = events + i;
 
                 // Skip low impact events
-                if(event.impactLevel < IMPACT_MEDIUM) {
+                if(event.impact == "LOW") {
                     continue;
                 }
 
                 NewsArticle article;
-                article.publishTime = event.eventTime;
-                article.headline = StringFormat("%s %s: %s",
-                    event.currency, event.eventName,
-                    event.isReleased ? "Released" : "Expected");
+                article.publishTime = event.time;
+                article.headline = StringFormat("%s %s",
+                    event.currency, event.title);
 
                 article.summary = StringFormat("Economic event for %s: %s. ",
-                    event.country, event.eventName);
+                    event.country, event.title);
 
-                if(event.isReleased) {
-                    article.summary += StringFormat("Actual: %s, Forecast: %s, Previous: %s",
-                        event.actualValue != EMPTY_VALUE ? DoubleToString(event.actualValue, 2) : "N/A",
-                        event.forecastValue != EMPTY_VALUE ? DoubleToString(event.forecastValue, 2) : "N/A",
-                        event.previousValue != EMPTY_VALUE ? DoubleToString(event.previousValue, 2) : "N/A");
-                } else {
-                    article.summary += StringFormat("Expected to release soon. Forecast: %s, Previous: %s",
-                        event.forecastValue != EMPTY_VALUE ? DoubleToString(event.forecastValue, 2) : "N/A",
-                        event.previousValue != EMPTY_VALUE ? DoubleToString(event.previousValue, 2) : "N/A");
-                }
+                article.summary += StringFormat("Actual: %s, Forecast: %s, Previous: %s",
+                        event.actual, event.forecast, event.previous);
 
                 article.url = "https://www.forexfactory.com";
                 article.source = source.name;
@@ -410,11 +402,14 @@ void CNewsAnalyzer::AnalyzeArticleSentiment(NewsArticle& article) {
 
         if(statusCode == 200) {
             string response = CharArrayToString(data);
-            CJAVal json;
-            if(json.Deserialize(response)) {
-                article.sentimentScore = (float)json.Prop("sentiment_score").Dbl();
-                article.impactScore = (int)json.Prop("impact_score").Int();
-                article.sentimentLevel = (ENUM_SENTIMENT)json.Prop("sentiment_level").Int();
+            char jsonChars[];
+            int len = StringToCharArray(response, jsonChars);
+            int index = 0;
+            JsonValue json;
+            if(json.DeserializeFromArray(jsonChars, len, index)) {
+                article.sentimentScore = json["sentiment_score"].ToDouble();
+                article.impactScore = (int)json["impact_score"].ToInteger();
+                article.sentimentLevel = (ENUM_SENTIMENT)json["sentiment_level"].ToInteger();
                 return;
             }
         }
@@ -656,34 +651,12 @@ bool CNewsAnalyzer::IsMarketSensitiveNews(string symbol, int bufferMinutes, int&
 
     // Check for high impact events for these currencies
     for(int i = 0; i < eventCount; i++) {
-        if((events[i].currency == baseCurrency || events[i].currency == quoteCurrency) &&
-           events[i].impactLevel >= IMPACT_HIGH) {
-            minutesToNews = (int)((events[i].eventTime - now) / 60);
+        EconomicEvent* event = events + i;
+        if((event.currency == baseCurrency || event.currency == quoteCurrency) &&
+           (event.impact == "HIGH" || event.impact == "EXTREME")) {
+            minutesToNews = (int)((event.time - now) / 60);
 
-            // Determine sentiment based on forecast vs previous
-            if(events[i].isReleased) {
-                if(events[i].actualValue > events[i].forecastValue) {
-                    sentiment = (baseCurrency == "USD" || baseCurrency == events[i].currency) ?
-                                 SENTIMENT_POSITIVE : SENTIMENT_NEGATIVE;
-                } else if(events[i].actualValue < events[i].forecastValue) {
-                    sentiment = (baseCurrency == "USD" || baseCurrency == events[i].currency) ?
-                                 SENTIMENT_NEGATIVE : SENTIMENT_POSITIVE;
-                } else {
-                    sentiment = SENTIMENT_NEUTRAL;
-                }
-            } else {
-                // For upcoming events, use neutral sentiment or analyze forecast vs previous
-                if(events[i].forecastValue > events[i].previousValue) {
-                    sentiment = (baseCurrency == "USD" || baseCurrency == events[i].currency) ?
-                                 SENTIMENT_POSITIVE : SENTIMENT_NEGATIVE;
-                } else if(events[i].forecastValue < events[i].previousValue) {
-                    sentiment = (baseCurrency == "USD" || baseCurrency == events[i].currency) ?
-                                 SENTIMENT_NEGATIVE : SENTIMENT_POSITIVE;
-                } else {
-                    sentiment = SENTIMENT_NEUTRAL;
-                }
-            }
-
+            sentiment = SENTIMENT_NEUTRAL;
             return true;
         }
     }

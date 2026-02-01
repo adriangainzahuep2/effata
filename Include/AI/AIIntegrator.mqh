@@ -16,16 +16,22 @@
 #include <Math/Stat/Math.mqh>
 #include <WebRequest.mqh>
 #include "../Calendar/EconomicCalendar.mqh"
-#include "../News/News.mqh"
+#include "../News/NewsAnalyzer.mqh"
 #include "../BrowserAgent/BrowserAgent.mqh"
+#include "../Core/AI_JSON_FILE.mqh"
 
 // AI model types
 enum ENUM_AI_MODEL {
     MODEL_GPT4,
+    MODEL_GPT5,
     MODEL_CLAUDE_OPUS_3,
+    MODEL_CLAUDE_OPUS_4,
     MODEL_GEMINI_PRO,
     MODEL_LLAMA3,
     MODEL_MISTRAL,
+    MODEL_DEEPSEEK_V32,
+    MODEL_QWEN3,
+    MODEL_MINIMAX21,
     MODEL_CUSTOM
 };
 
@@ -922,14 +928,18 @@ TradeDecision CAIIntegrator::ParseModelResponse(string response, AIModelConfig& 
     }
 
     // Parse JSON response
-    CJAVal json;
-    if(!json.Deserialize(response)) {
+    char jsonChars[];
+    int len = StringToCharArray(response, jsonChars);
+    int index = 0;
+
+    JsonValue json;
+    if(!json.DeserializeFromArray(jsonChars, len, index)) {
         decision.reasoning = "Failed to parse JSON response: " + response;
         return decision;
     }
 
     // Extract action
-    string actionStr = json.HasProp("action") ? json.Prop("action").Str() : "";
+    string actionStr = json["action"].ToString();
     StringToUpper(actionStr);
 
     if(StringFind(actionStr, "BUY") >= 0 || StringFind(actionStr, "LONG") >= 0) {
@@ -941,7 +951,8 @@ TradeDecision CAIIntegrator::ParseModelResponse(string response, AIModelConfig& 
     }
 
     // Extract confidence
-    decision.confidenceScore = json.HasProp("confidence") ? (float)json.Prop("confidence").Dbl() : 0.5;
+    decision.confidenceScore = json["confidence"].ToDouble();
+    if(decision.confidenceScore == 0) decision.confidenceScore = 0.5;
 
     // Map confidence score to level
     if(decision.confidenceScore >= 0.9) {
@@ -957,13 +968,13 @@ TradeDecision CAIIntegrator::ParseModelResponse(string response, AIModelConfig& 
     }
 
     // Extract prices
-    decision.entryPrice = json.HasProp("entry_price") ? (float)json.Prop("entry_price").Dbl() : 0.0;
-    decision.stopLoss = json.HasProp("stop_loss") ? (float)json.Prop("stop_loss").Dbl() : 0.0;
-    decision.takeProfit = json.HasProp("take_profit") ? (float)json.Prop("take_profit").Dbl() : 0.0;
-    decision.positionSize = json.HasProp("position_size") ? (float)json.Prop("position_size").Dbl() : 0.0;
+    decision.entryPrice = json["entry_price"].ToDouble();
+    decision.stopLoss = json["stop_loss"].ToDouble();
+    decision.takeProfit = json["take_profit"].ToDouble();
+    decision.positionSize = json["position_size"].ToDouble();
 
     // Extract reasoning
-    decision.reasoning = json.HasProp("reasoning") ? json.Prop("reasoning").Str() : "No reasoning provided";
+    decision.reasoning = json["reasoning"].ToString();
 
     // Validate decision
     decision.isValid = (decision.confidenceScore > 0.2); // Minimum confidence threshold

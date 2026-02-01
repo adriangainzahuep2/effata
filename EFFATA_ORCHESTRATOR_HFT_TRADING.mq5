@@ -42,6 +42,7 @@
 #include "Include/Environments/StatisticsEnv.mqh"
 #include "Include/Orchestrator/AgentOrchestrator.mqh"
 #include "Include/MarketContext/MarketContextAnalyzer.mqh"
+#include "Include/Calendar/EconomicCalendar.mqh"
 #include "Include/Environments/MultiAccountManagerEnv.mqh"
 
 // Helper libs
@@ -96,6 +97,8 @@ CBacktestAnalyzer     *g_BacktestAnalyzer;
 // Indicators
 CAndeanOscillator     *g_Andean;
 CVWAP                 *g_VWAP;
+
+double                g_ActiveRiskPercent;
 CFibonacci            *g_Fibo;
 ICTFramework          *g_ICT;
 CCRTTheory            *g_CRT;
@@ -103,7 +106,7 @@ CMarketContextAnalyzer *g_ContextAnalyzer;
 
 double                 g_MarketFeatures[256];
 
-BrowserAgent            *g_Browser_Agent;
+CBrowserAgent          *g_Browser_Agent;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -111,7 +114,7 @@ BrowserAgent            *g_Browser_Agent;
 int OnInit()
 {
 
-    g_Browser_Agent = new BrowserAgent();
+    g_Browser_Agent = new CBrowserAgent();
     g_Browser_Agent->StartBrowser(false);
     // Initialize global objects
     g_Orchestrator = new CAgentOrchestrator();
@@ -135,6 +138,7 @@ int OnInit()
 
     // Wire up environments
     g_RiskEnv->SetStatisticsEnv(g_StatsEnv);
+    g_ActiveRiskPercent = InpRiskPerTradePercent;
     // g_StrategyEnv->SetStatisticsEnv(g_StatsEnv); // If StrategyEnv supports it
 
     // Configure DeepSeek V3.2 Self-Verification
@@ -242,7 +246,9 @@ void OnTick()
     g_Calendar->NotifyImportantEvents();
     if(g_Calendar->IsRiskReductionRequired(30)) {
         // Automatically reduce position sizes or avoid new trades
-        InpRiskPerTradePercent *= 0.5;
+        g_ActiveRiskPercent = InpRiskPerTradePercent * 0.5;
+    } else {
+        g_ActiveRiskPercent = InpRiskPerTradePercent;
     }
 
     // Risk Monitor

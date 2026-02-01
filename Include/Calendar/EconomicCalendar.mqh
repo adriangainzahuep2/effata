@@ -61,6 +61,7 @@ public:
    }
 
    bool UpdateCalendar() {
+      bool success = false;
       // Loop through sources and fetch data
       for(int i=0; i<m_sourceCount; i++) {
          if(!m_sources[i].isActive) continue;
@@ -70,22 +71,43 @@ public:
          string resultHeaders;
 
          // Only run if Allowed in Terminal
-         if(TerminalInfoInteger(TERMINAL_DLLS_ALLOWED) && TerminalInfoInteger(TERMINAL_TRADE_ALLOWED)) {
+         if(TerminalInfoInteger(TERMINAL_DLLS_ALLOWED)) {
              int res = WebRequest("GET", m_sources[i].url, headers, 10000, data, resultHeaders);
              if(res == 200) {
                  ParseData(data, m_sources[i].parserType);
-                 return true;
+                 success = true;
              } else {
                  Print("WebRequest failed for ", m_sources[i].url, " Error: ", GetLastError());
              }
          } else {
-             // Mock data if WebRequest not allowed/configured
-             // Print("WebRequest not allowed. Using mock calendar data.");
-             // CreateMockEvents();
              return false;
          }
       }
-      return false;
+      return success;
+   }
+
+   bool IsUpdateNeeded() {
+       static datetime lastUpdate = 0;
+       if(TimeCurrent() - lastUpdate > 3600) {
+           lastUpdate = TimeCurrent();
+           return true;
+       }
+       return false;
+   }
+
+   EconomicEvent* GetEventsInTimeframe(datetime from, datetime to, int &count) {
+       static EconomicEvent result[];
+       ArrayResize(result, 0);
+       count = 0;
+       for(int i=0; i<ArraySize(m_events); i++) {
+           if(m_events[i].time >= from && m_events[i].time <= to) {
+               int size = ArraySize(result);
+               ArrayResize(result, size + 1);
+               result[size] = m_events[i];
+               count++;
+           }
+       }
+       return count > 0 ? GetPointer(result[0]) : NULL;
    }
 
    void ParseData(char &data[], string type) {
@@ -120,12 +142,31 @@ public:
 
        for(int i=0; i<ArraySize(m_events); i++) {
            if(m_events[i].time > now) {
-               if(filter_impact == "High" && m_events[i].impact == "High") return m_events[i];
-               if(filter_impact == "Medium" && (m_events[i].impact == "High" || m_events[i].impact == "Medium")) return m_events[i];
+               if(filter_impact == "High" && (m_events[i].impact == "High" || m_events[i].impact == "EXTREME")) return m_events[i];
+               if(filter_impact == "Medium" && (m_events[i].impact == "High" || m_events[i].impact == "MEDIUM" || m_events[i].impact == "EXTREME")) return m_events[i];
                if(filter_impact == "Low") return m_events[i];
            }
        }
        return evt;
+   }
+
+   EconomicEvent* GetNextHighImpactEvent(datetime after, string currencies) {
+       static EconomicEvent evt;
+       ZeroMemory(evt);
+       string curArray[];
+       int curCount = StringSplit(currencies, ',', curArray);
+
+       for(int i=0; i<ArraySize(m_events); i++) {
+           if(m_events[i].time > after && (m_events[i].impact == "High" || m_events[i].impact == "EXTREME")) {
+               for(int j=0; j<curCount; j++) {
+                   if(m_events[i].currency == curArray[j]) {
+                       evt = m_events[i];
+                       return GetPointer(evt);
+                   }
+               }
+           }
+       }
+       return NULL;
    }
 
    bool IsRiskReductionRequired(int minutes_before = 30) {
