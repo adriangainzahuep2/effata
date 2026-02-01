@@ -42,6 +42,7 @@
 #include "Include/Environments/StatisticsEnv.mqh"
 #include "Include/Orchestrator/AgentOrchestrator.mqh"
 #include "Include/MarketContext/MarketContextAnalyzer.mqh"
+#include "Include/Environments/MultiAccountManagerEnv.mqh"
 
 // Helper libs
 #include "Include/Reports/BacktestAnalyzer.mqh"
@@ -87,6 +88,7 @@ CPatternDetectionEnv  *g_PatternEnv;
 CStrategyEnv          *g_StrategyEnv;
 CRiskManagementEnv    *g_RiskEnv;
 CStatisticsEnv        *g_StatsEnv;
+CMultiAccountManager  *g_MAM;
 CDashboard            *g_Dashboard;
 CBacktestAnalyzer     *g_BacktestAnalyzer;
 
@@ -119,6 +121,7 @@ int OnInit()
     g_StrategyEnv = new CStrategyEnv();
     g_RiskEnv = new CRiskManagementEnv(InpRiskPerTradePercent, InpEnableAdaptiveRisk);
     g_StatsEnv = new CStatisticsEnv();
+    g_MAM = new CMultiAccountManager();
     g_Dashboard = new CDashboard("EFFATA ORCHESTRATOR V4.02");
     g_BacktestAnalyzer = new CBacktestAnalyzer("EFFATA_Report.txt");
 
@@ -188,6 +191,7 @@ void OnDeinit(const int reason)
     if(CheckPointer(g_StrategyEnv) == POINTER_DYNAMIC) delete g_StrategyEnv;
     if(CheckPointer(g_RiskEnv) == POINTER_DYNAMIC) delete g_RiskEnv;
     if(CheckPointer(g_StatsEnv) == POINTER_DYNAMIC) delete g_StatsEnv;
+    if(CheckPointer(g_MAM) == POINTER_DYNAMIC) delete g_MAM;
     if(CheckPointer(g_BacktestAnalyzer) == POINTER_DYNAMIC) delete g_BacktestAnalyzer;
 
     // Cleanup Indicators
@@ -244,7 +248,20 @@ void OnTick()
 
     // Execution Logic
     if(decision.action != NO_SIGNAL && decision.confidence >= InpConfidenceThreshold) {
-        g_ExecutionEnv->ExecuteDecision(decision);
+        STradeAction mam_action;
+        mam_action.symbol = _Symbol;
+        mam_action.action_type = (decision.action == BUY_SIGNAL) ? 1 : 2;
+        mam_action.lot_size = decision.positionSize;
+        mam_action.sl_price = decision.stopLoss;
+        mam_action.tp_price = decision.takeProfit;
+        mam_action.comment = decision.reasoning;
+
+        if(g_MAM.GetAccountCount() > 0) {
+            g_MAM.ExecuteMasterTrade(mam_action);
+        } else {
+            g_ExecutionEnv->ExecuteDecision(decision);
+        }
+
         if(decision.action != NO_SIGNAL) {
             g_StatsEnv->RecordTradeDecision(decision);
         }
@@ -316,12 +333,16 @@ void UpdateDashboardInfo() {
 //| Helper: Extract Features                                         |
 //+------------------------------------------------------------------+
 void ExtractMarketFeatures(double &features[]) {
-    // Basic extraction
+    // Basic extraction with normalization
     ArrayInitialize(features, 0.0);
-    features[0] = iClose(_Symbol, PERIOD_CURRENT, 0);
-    features[1] = iOpen(_Symbol, PERIOD_CURRENT, 0);
-    features[2] = iHigh(_Symbol, PERIOD_CURRENT, 0);
-    features[3] = iLow(_Symbol, PERIOD_CURRENT, 0);
+    double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+    int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+    double multiplier = MathPow(10, digits);
+
+    features[0] = iClose(_Symbol, PERIOD_CURRENT, 0) * multiplier;
+    features[1] = iOpen(_Symbol, PERIOD_CURRENT, 0) * multiplier;
+    features[2] = iHigh(_Symbol, PERIOD_CURRENT, 0) * multiplier;
+    features[3] = iLow(_Symbol, PERIOD_CURRENT, 0) * multiplier;
     features[4] = (double)iVolume(_Symbol, PERIOD_CURRENT, 0);
 
     // Add indicators

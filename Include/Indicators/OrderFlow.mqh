@@ -132,9 +132,15 @@ public:
             bar.cells[i].total_vol = bar.cells[i].bid_vol + bar.cells[i].ask_vol;
             bar.cells[i].delta = bar.cells[i].ask_vol - bar.cells[i].bid_vol;
 
-            // Imbalance detection (300% rule)
-            bar.cells[i].is_imbalance_buy = (bar.cells[i].ask_vol >= bar.cells[i].bid_vol * 3.0 && bar.cells[i].bid_vol > 0);
-            bar.cells[i].is_imbalance_sell = (bar.cells[i].bid_vol >= bar.cells[i].ask_vol * 3.0 && bar.cells[i].ask_vol > 0);
+            // Diagonal Imbalance detection (300% rule)
+            // Buying Imbalance: Ask[i] vs Bid[i-1] (Ask at higher price vs Bid at lower price)
+            if(i > 0) {
+                bar.cells[i].is_imbalance_buy = (bar.cells[i].ask_vol >= bar.cells[i-1].bid_vol * 3.0 && bar.cells[i-1].bid_vol > 0);
+            }
+            // Selling Imbalance: Bid[i] vs Ask[i+1] (Bid at lower price vs Ask at higher price)
+            if(i < num_cells - 1) {
+                bar.cells[i].is_imbalance_sell = (bar.cells[i].bid_vol >= bar.cells[i+1].ask_vol * 3.0 && bar.cells[i+1].ask_vol > 0);
+            }
 
             bar.delta += bar.cells[i].delta;
             bar.total_volume += bar.cells[i].total_vol;

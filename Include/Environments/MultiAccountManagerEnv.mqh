@@ -62,6 +62,8 @@ struct SAccountConnection {
     int                      current_positions;
     bool                     auto_trading_enabled;
     bool                     copy_enabled;
+    bool                     is_external;      // True for Tradovate/Rithmic etc via bridge
+    string                   external_provider; // "tradovate", "dxfeed", etc.
     double                   risk_multiplier;
     datetime                 last_sync;
     datetime                 last_activity;
@@ -208,6 +210,7 @@ public:
 
     // Individual Operations
     bool                    ExecuteTrade(string account_id, STradeAction action);
+    bool                    ExecuteExternalTrade(string account_id, STradeAction action, string provider);
     bool                    ClosePosition(string account_id, string ticket);
     bool                    ModifyStopLoss(string account_id, string ticket, double sl_price);
     bool                    ModifyTakeProfit(string account_id, string ticket, double tp_price);
@@ -506,8 +509,24 @@ bool CMultiAccountManager::AllocateTradeToSlaves(STradeAction master_action) {
                                       account->comments + "-Copy");
         }
 
+        if(account->is_external) {
+            STradeAction ext_action = master_action;
+            ext_action.lot_size = allocated_lots;
+            success = ExecuteExternalTrade(account->connection_id, ext_action, account->external_provider);
+        } else {
+            if(master_action.action_type == 1) {
+                success = slave_trade.Buy(allocated_lots, master_action.symbol,
+                                         master_action.sl_price, master_action.tp_price,
+                                         account->comments + "-Copy");
+            } else if(master_action.action_type == 2) {
+                success = slave_trade.Sell(allocated_lots, master_action.symbol,
+                                          master_action.sl_price, master_action.tp_price,
+                                          account->comments + "-Copy");
+            }
+        }
+
         if(success) {
-            string slave_ticket = IntegerToString(slave_trade.ResultOrder());
+            string slave_ticket = account->is_external ? "EXT-" + account->connection_id : IntegerToString(slave_trade.ResultOrder());
             allocation->allocated_lots.Add(allocated_lots);
             allocation->account_ids.Add(account->connection_id);
             allocation->slave_tickets.Add(slave_ticket);
@@ -622,6 +641,29 @@ bool CMultiAccountManager::ExecuteTrade(string account_id, STradeAction action) 
     }
 
     return result;
+}
+
+//+------------------------------------------------------------------+
+//| Execute External Trade via Python Bridge                         |
+//+------------------------------------------------------------------+
+bool CMultiAccountManager::ExecuteExternalTrade(string account_id, STradeAction action, string provider) {
+    char data[], result[];
+    string headers = "Content-Type: application/json\r\n";
+    string action_str = (action.action_type == 1) ? "Buy" : "Sell";
+
+    string payload = StringFormat("{\"account_id\":\"%s\", \"provider\":\"%s\", \"symbol\":\"%s\", \"action\":\"%s\", \"quantity\":%d}",
+                                 account_id, provider, action.symbol, action_str, (int)(action.lot_size));
+
+    string url = "http://localhost:8000/execute_trade";
+    int res = WebRequest("POST", url, headers, 5000, data, result, headers);
+
+    if(res == 200) {
+        Print("External trade successfully routed to bridge: ", account_id);
+        return true;
+    }
+
+    Print("External trade routing failed: ", res);
+    return false;
 }
 
 //+------------------------------------------------------------------+

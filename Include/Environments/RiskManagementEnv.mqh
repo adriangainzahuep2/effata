@@ -23,10 +23,17 @@ enum ENUM_ACCOUNT_PHASE {
     PHASE_SUSPENDED
 };
 
+enum ENUM_DRAWDOWN_TYPE {
+    DRAWDOWN_FIXED,         // FTMO Style: based on start-of-day balance
+    DRAWDOWN_TRAILING_EOD,  // MyForexFunds Style: based on end-of-day balance
+    DRAWDOWN_TRAILING_INTRADAY // APEX/Tradeify Style: based on peak equity
+};
+
 // Prop firm rules structure
 struct PropFirmRules {
     double maxDailyLoss;           // Maximum daily loss as percentage of account
     double maxTrailingDrawdown;    // Maximum trailing drawdown percentage
+    ENUM_DRAWDOWN_TYPE drawdownType;
     double maxPositionSize;        // Maximum position size in lots
     double maxDailyTrades;         // Maximum number of trades per day
     double maxCorrelationExposure; // Maximum correlation exposure percentage
@@ -163,8 +170,16 @@ void CRiskManagementEnv::UpdateRiskMetrics() {
 
     m_metrics.dailyLoss = (m_initialBalance - currentBalance) / m_initialBalance;
 
-    // Calculate trailing drawdown
-    m_metrics.trailingDrawdown = (m_peakEquity - currentEquity) / m_peakEquity;
+    // Calculate drawdown based on firm-specific rules
+    if(m_rules.drawdownType == DRAWDOWN_TRAILING_INTRADAY) {
+        // APEX Style: uses peak equity
+        m_metrics.trailingDrawdown = (m_peakEquity - currentEquity) / m_peakEquity;
+    } else if(m_rules.drawdownType == DRAWDOWN_FIXED) {
+        // FTMO Style: uses initial/daily balance
+        m_metrics.trailingDrawdown = (m_initialBalance - currentEquity) / m_initialBalance;
+    } else {
+        m_metrics.trailingDrawdown = (m_initialBalance - currentEquity) / m_initialBalance;
+    }
 
     // Calculate current exposure
     double marginUsed = AccountInfoDouble(ACCOUNT_MARGIN);
