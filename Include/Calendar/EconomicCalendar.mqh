@@ -113,17 +113,31 @@ public:
        }
    }
 
-   EconomicEvent GetNextHighImpactEvent() {
+   EconomicEvent GetNextHighImpactEvent(string filter_impact = "High") {
        EconomicEvent evt;
        ZeroMemory(evt);
        datetime now = TimeCurrent();
 
        for(int i=0; i<ArraySize(m_events); i++) {
-           if(m_events[i].time > now && (m_events[i].impact == "High" || m_events[i].impact == "Medium")) {
-               return m_events[i];
+           if(m_events[i].time > now) {
+               if(filter_impact == "High" && m_events[i].impact == "High") return m_events[i];
+               if(filter_impact == "Medium" && (m_events[i].impact == "High" || m_events[i].impact == "Medium")) return m_events[i];
+               if(filter_impact == "Low") return m_events[i];
            }
        }
        return evt;
+   }
+
+   bool IsRiskReductionRequired(int minutes_before = 30) {
+       EconomicEvent evt = GetNextHighImpactEvent("High");
+       if(evt.time == 0) return false;
+
+       long diff = (long)evt.time - (long)TimeCurrent();
+       if(diff > 0 && diff < minutes_before * 60) {
+           Print("ECONOMIC ALERT: High impact event '", evt.title, "' in ", diff/60, " minutes. Risk reduction required.");
+           return true;
+       }
+       return false;
    }
 };
 #endif // ECONOMIC_CALENDAR_MQH

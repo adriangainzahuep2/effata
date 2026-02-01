@@ -64,7 +64,10 @@ struct SAccountConnection {
     bool                     copy_enabled;
     bool                     is_external;      // True for Tradovate/Rithmic etc via bridge
     string                   external_provider; // "tradovate", "dxfeed", etc.
-    double                   risk_multiplier;
+    bool                     is_leader;        // If this account is a master to be copied
+    string                   leader_id;        // ID of the leader this account follows
+    double                   copy_multiplier;  // Decimal leverage (e.g. 0.5, 1.8)
+    double                   max_lot_size;     // Custom size limit
     datetime                 last_sync;
     datetime                 last_activity;
     CArrayString             trade_symbols;
@@ -128,9 +131,9 @@ private:
     CArrayObj                m_allocations;
     CArrayObj                m_performance_history;
 
-    // Master Account
-    SAccountConnection       m_master_account;
-    bool                     m_is_master_slave_mode;
+    // Multiple Leaders and Followers
+    CArrayString             m_leader_ids;
+    bool                     m_is_multi_broker_enabled;
 
     // Pooled Account
     double                   m_pooled_total_balance;
@@ -140,6 +143,8 @@ private:
 
     // Risk Management
     double                   m_total_risk_per_trade;
+    double                   m_group_max_lot_limit;
+    int                      m_group_max_position_limit;
     double                   m_max_group_drawdown_pct;
     double                   m_current_group_drawdown;
     double                   m_group_profit_target;
@@ -185,6 +190,7 @@ public:
     bool                    Initialize();
     bool                    LoadConfiguration(string config_file);
     bool                    AddAccount(SAccountConnection account);
+    bool                    AddExternalAccount(string account_id, string provider, double multiplier = 1.0, double max_lots = 0.0);
     bool                    RemoveAccount(string account_id);
     bool                    ConnectAccount(string account_id);
     bool                    DisconnectAccount(string account_id);
@@ -363,6 +369,30 @@ bool CMultiAccountManager::AddAccount(SAccountConnection account) {
 }
 
 //+------------------------------------------------------------------+
+//| Add External Account                                             |
+//+------------------------------------------------------------------+
+bool CMultiAccountManager::AddExternalAccount(string account_id, string provider, double multiplier, double max_lots) {
+    SAccountConnection *new_account = new SAccountConnection();
+    ZeroMemory(*new_account);
+
+    new_account->connection_id = account_id;
+    new_account->broker_name = provider;
+    new_account->is_external = true;
+    new_account->external_provider = provider;
+    new_account->copy_multiplier = multiplier;
+    new_account->max_lot_size = max_lots;
+    new_account->status = ACCOUNT_STATUS_CONNECTED; // Assume connected for external
+    new_account->copy_enabled = true;
+    new_account->auto_trading_enabled = true;
+    new_account->max_positions = 100;
+
+    m_accounts.Add(new_account);
+
+    Print("External account added: ", account_id, " Provider: ", provider, " Multiplier: ", multiplier);
+    return true;
+}
+
+//+------------------------------------------------------------------+
 //| Connect Account                                                  |
 //+------------------------------------------------------------------+
 bool CMultiAccountManager::ConnectAccount(string account_id) {
@@ -488,13 +518,22 @@ bool CMultiAccountManager::AllocateTradeToSlaves(STradeAction master_action) {
             continue;
         }
 
-        double allocated_lots = CalculateAllocatedLots(account->connection_id, master_action.lot_size);
+        // Filter by leader
+        if(account->leader_id != master_action.comment && master_action.comment != "ALL") continue;
+
+        double allocated_lots = master_action.lot_size * account->copy_multiplier;
 
         if(allocated_lots < m_min_lot_allocation) {
             continue;
         }
 
-        allocated_lots = MathRound(allocated_lots / account->risk_multiplier * 100) / 100;
+        // Custom Size Limit enforcement
+        if(account->max_lot_size > 0 && allocated_lots > account->max_lot_size) {
+            Print("Account ", account->connection_id, " lot size capped at ", account->max_lot_size);
+            allocated_lots = account->max_lot_size;
+        }
+
+        allocated_lots = MathRound(allocated_lots * 100) / 100;
 
         CTrade slave_trade;
         bool success = false;

@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "2025, EFFATA Trading Systems"
 #property version   "1.00"
-#property strict
+
 
 #include "../Indicators/VWAP.mqh"
 #include "../Indicators/VolumeProfile.mqh"
