@@ -91,14 +91,18 @@ public:
 
                 int cell_idx = (int)((price - low) / m_tick_size);
                 if(cell_idx >= 0 && cell_idx < num_cells) {
-                    if(ticks[i].last >= ticks[i].ask) { // Aggressive Buy
-                        bar.cells[cell_idx].ask_vol += (double)ticks[i].volume;
-                    } else if(ticks[i].last <= ticks[i].bid) { // Aggressive Sell
-                        bar.cells[cell_idx].bid_vol += (double)ticks[i].volume;
+                    double vol = (double)ticks[i].volume;
+                    if(vol == 0) vol = (double)ticks[i].volume_real;
+                    if(vol == 0) vol = 1;
+
+                    if(ticks[i].last >= ticks[i].ask || (ticks[i].flags & TICK_FLAG_ASK) > 0) { // Aggressive Buy
+                        bar.cells[cell_idx].ask_vol += vol;
+                    } else if(ticks[i].last <= ticks[i].bid || (ticks[i].flags & TICK_FLAG_BID) > 0) { // Aggressive Sell
+                        bar.cells[cell_idx].bid_vol += vol;
                     } else {
                         // Distributed if in between
-                        bar.cells[cell_idx].ask_vol += (double)ticks[i].volume * 0.5;
-                        bar.cells[cell_idx].bid_vol += (double)ticks[i].volume * 0.5;
+                        bar.cells[cell_idx].ask_vol += vol * 0.5;
+                        bar.cells[cell_idx].bid_vol += vol * 0.5;
                     }
                 }
             }

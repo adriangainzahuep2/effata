@@ -190,6 +190,17 @@ public:
         return m_browserAgent.RequestAnalysis(provider, symbol, tf, resp);
     }
 
+    // External Futures Data Integration
+    string FetchExternalFuturesData(string symbol) {
+        // Implementation for calling Python Data Bridge via WebRequest
+        char data[], result[];
+        string headers = "Content-Type: application/json\r\n";
+        string url = "http://localhost:8000/futures_data?symbol=" + symbol;
+        int res = WebRequest("GET", url, headers, 5000, data, result, headers);
+        if(res == 200) return CharArrayToString(result);
+        return "";
+    }
+
 private:
     // AI communication methods
     bool CanMakeRequest(ENUM_AI_MODEL modelType);

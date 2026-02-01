@@ -43,7 +43,7 @@ public:
         ArrayFree(m_volume_data);
     }
 
-    // Calculate Volume Profile for a given number of bars
+    // Calculate Volume Profile using real tick data
     bool Calculate(int bars = 1000) {
         if(bars <= 0) return false;
 
@@ -66,30 +66,46 @@ public:
         ArrayInitialize(m_volume_data, 0.0);
         m_total_volume = 0;
 
-        // 3. Populate bins
-        for(int i = 0; i < bars; i++) {
-            double h = iHigh(m_symbol, m_period, i);
-            double l = iLow(m_symbol, m_period, i);
-            double c = iClose(m_symbol, m_period, i);
-            double vol = (double)iTickVolume(m_symbol, m_period, i);
+        // 3. Use CopyTicksRange for real tick-based volume analysis
+        datetime start_time = iTime(m_symbol, m_period, bars-1);
+        datetime end_time = TimeCurrent();
 
-            // Distribute volume across price range of the bar (simplified)
-            int bin_start = (int)((l - m_min_price) / m_step);
-            int bin_end = (int)((h - m_min_price) / m_step);
+        MqlTick ticks[];
+        int copied = CopyTicksRange(m_symbol, ticks, COPY_TICKS_ALL, start_time * 1000, end_time * 1000);
 
-            if(bin_start == bin_end) {
-                if(bin_start >= 0 && bin_start < m_bins) {
-                    m_volume_data[bin_start] += vol;
-                }
-            } else {
-                double vol_per_bin = vol / (bin_end - bin_start + 1);
-                for(int b = bin_start; b <= bin_end; b++) {
-                    if(b >= 0 && b < m_bins) {
-                        m_volume_data[b] += vol_per_bin;
-                    }
+        if(copied > 0) {
+            for(int i = 0; i < copied; i++) {
+                double price = ticks[i].last;
+                if(price == 0) price = (ticks[i].bid + ticks[i].ask) / 2.0;
+
+                int bin_idx = (int)((price - m_min_price) / m_step);
+                if(bin_idx >= 0 && bin_idx < m_bins) {
+                    double vol = (double)ticks[i].volume;
+                    if(vol == 0) vol = 1; // Minimum volume if not provided
+                    m_volume_data[bin_idx] += vol;
+                    m_total_volume += vol;
                 }
             }
-            m_total_volume += vol;
+        } else {
+            // Fallback to bar volume distribution if no ticks available
+            for(int i = 0; i < bars; i++) {
+                double h = iHigh(m_symbol, m_period, i);
+                double l = iLow(m_symbol, m_period, i);
+                double vol = (double)iTickVolume(m_symbol, m_period, i);
+
+                int bin_start = (int)((l - m_min_price) / m_step);
+                int bin_end = (int)((h - m_min_price) / m_step);
+
+                if(bin_start == bin_end) {
+                    if(bin_start >= 0 && bin_start < m_bins) m_volume_data[bin_start] += vol;
+                } else {
+                    double vol_per_bin = vol / (bin_end - bin_start + 1);
+                    for(int b = bin_start; b <= bin_end; b++) {
+                        if(b >= 0 && b < m_bins) m_volume_data[b] += vol_per_bin;
+                    }
+                }
+                m_total_volume += vol;
+            }
         }
 
         // 4. Find HVN and LVN
