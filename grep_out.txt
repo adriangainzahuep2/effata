@@ -1,0 +1,1 @@
+218:    string BuildTradingPrompt(string symbol, MqlRates& rates[], int ratesCount, TechnicalIndicators& indicators);

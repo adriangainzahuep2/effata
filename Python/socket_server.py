@@ -95,18 +95,19 @@ class MQL5SocketServer:
         elif action == "evaluate_script":
             script = request.get("script")
             logger.info(f"Evaluating script: {script[:50]}...")
-            # Use anti_detect_browser or similar to execute script
-            # For simplicity, we assume TradingAnalyzer has a browser instance
             try:
-                # This is a hypothetical call to the browser in analyzer
-                # If using Playwright in analyzer:
-                if hasattr(self.analyzer, "browser") and self.analyzer.browser:
-                    page = self.analyzer.browser.pages[0] if self.analyzer.browser.pages else await self.analyzer.browser.new_page()
-                    result = await page.evaluate(script)
-                    return {"status": "success", "result": str(result)}
+                # Institutional implementation: use the active LMArena scraper browser
+                if self.analyzer.lm_scraper and self.analyzer.lm_scraper.browser:
+                    page = self.analyzer.lm_scraper.browser.page
+                    if page:
+                        result = await page.evaluate(script)
+                        return {"status": "success", "result": str(result)}
+                    else:
+                        return {"status": "error", "message": "Browser page not initialized"}
                 else:
-                    return {"status": "error", "message": "Browser not initialized in analyzer"}
+                    return {"status": "error", "message": "LMArena scraper or browser not initialized"}
             except Exception as e:
+                logger.error(f"Script evaluation error: {e}")
                 return {"status": "error", "message": str(e)}
 
         elif action == "ping":
