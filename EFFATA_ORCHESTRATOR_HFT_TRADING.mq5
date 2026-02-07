@@ -93,6 +93,7 @@ CStatisticsEnv        *g_StatsEnv;
 CMultiAccountManager  *g_MAM;
 CDashboard            *g_Dashboard;
 CBacktestAnalyzer     *g_BacktestAnalyzer;
+CMonteCarloRiskEnvironment *g_MonteCarloEnv;
 
 // Indicators
 CAndeanOscillator     *g_Andean;
@@ -127,6 +128,7 @@ int OnInit()
     g_MAM = new CMultiAccountManager();
     g_Dashboard = new CDashboard("EFFATA ORCHESTRATOR V4.02");
     g_BacktestAnalyzer = new CBacktestAnalyzer("EFFATA_Report.txt");
+    g_MonteCarloEnv = new CMonteCarloRiskEnvironment();
 
     // Initialize Indicators
     g_Andean = new CAndeanOscillator(_Symbol, PERIOD_CURRENT);
@@ -149,7 +151,8 @@ int OnInit()
        !g_StrategyEnv->Initialize() ||
        !g_RiskEnv->Initialize() ||
        !g_ExecutionEnv->Initialize() ||
-       !g_StatsEnv->Initialize())
+       !g_StatsEnv->Initialize() ||
+       !g_MonteCarloEnv->Initialize())
     {
         Print("❌ Failed to initialize one or more environments");
         return(INIT_FAILED);
@@ -198,6 +201,7 @@ void OnDeinit(const int reason)
     if(CheckPointer(g_StatsEnv) == POINTER_DYNAMIC) delete g_StatsEnv;
     if(CheckPointer(g_MAM) == POINTER_DYNAMIC) delete g_MAM;
     if(CheckPointer(g_BacktestAnalyzer) == POINTER_DYNAMIC) delete g_BacktestAnalyzer;
+    if(CheckPointer(g_MonteCarloEnv) == POINTER_DYNAMIC) delete g_MonteCarloEnv;
 
     // Cleanup Indicators
     if(CheckPointer(g_Andean) == POINTER_DYNAMIC) delete g_Andean;
@@ -253,6 +257,13 @@ void OnTick()
 
     // Risk Monitor
     if(!g_ExecutionEnv->MonitorRiskAndEquity()) {
+        return;
+    }
+
+    // Monte Carlo Risk Verification
+    RiskAssessment mc_risk = g_MonteCarloEnv->GetRiskAssessment();
+    if(!mc_risk.allowTrading) {
+        Print("⚠️ Trading blocked by Monte Carlo simulation: ", mc_risk.reason);
         return;
     }
 
@@ -370,6 +381,8 @@ void ExtractMarketFeatures(double &features[]) {
 
     // Add indicators
     features[5] = iRSI(_Symbol, PERIOD_CURRENT, 14, PRICE_CLOSE, 0) / 100.0;
+    features[6] = iATR(_Symbol, PERIOD_CURRENT, 14, 0) / iClose(_Symbol, PERIOD_CURRENT, 0); // Normalized ATR
+    features[8] = (iHigh(_Symbol, PERIOD_D1, 0) - iLow(_Symbol, PERIOD_D1, 0)) / iClose(_Symbol, PERIOD_CURRENT, 0); // Daily Volatility
 
     // Patterns
     PatternResult pattern = g_PatternEnv->DetectPatterns();

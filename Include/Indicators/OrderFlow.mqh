@@ -203,4 +203,44 @@ public:
         }
         return false;
     }
+
+    // Confirmation Setup #2: Absorption
+    // Returns 1 if Bullish Absorption (Buying everything Sellers sell), -1 for Bearish, 0 otherwise
+    int DetectAbsorption(int shift = 0) {
+        if(shift >= m_history_size) return 0;
+        FootprintBar bar = m_history[m_history_size - 1 - shift];
+
+        double avg_vol = bar.total_volume / MathMax(1, ArraySize(bar.cells));
+
+        for(int i = 0; i < ArraySize(bar.cells); i++) {
+            // Unusually large volumes on both Bid and Ask
+            if(bar.cells[i].bid_vol > avg_vol * 3.0 && bar.cells[i].ask_vol > avg_vol * 3.0) {
+                // If price is at the bottom of the bar, it's likely support absorption
+                if(i < ArraySize(bar.cells) / 3) return 1;
+                // If price is at the top of the bar, it's likely resistance absorption
+                if(i > ArraySize(bar.cells) * 2 / 3) return -1;
+            }
+        }
+        return 0;
+    }
+
+    // Confirmation Setup #1: Big Limit Orders (Passive Participants)
+    bool DetectBigLimitOrders(double threshold_vol, int &out_type) {
+        // Since we can't see the order book directly with just ticks in some brokers,
+        // we infer it from heavy passive fills.
+        if(m_history_size == 0) return false;
+        FootprintBar bar = m_history[m_history_size - 1];
+
+        for(int i = 0; i < ArraySize(bar.cells); i++) {
+            if(bar.cells[i].bid_vol > threshold_vol) {
+                out_type = 1; // Passive Buyer Fill (Support)
+                return true;
+            }
+            if(bar.cells[i].ask_vol > threshold_vol) {
+                out_type = -1; // Passive Seller Fill (Resistance)
+                return true;
+            }
+        }
+        return false;
+    }
 };
