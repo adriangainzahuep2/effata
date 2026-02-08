@@ -540,11 +540,11 @@ bool CMultiAccountManager::AllocateTradeToSlaves(STradeAction master_action) {
         CTrade slave_trade;
         bool success = false;
 
-        if(master_action.action_type == 1) {
+        if(master_action.action_type == TRADE_ACTION_BUY) {
             success = slave_trade.Buy(allocated_lots, master_action.symbol,
                                      master_action.sl_price, master_action.tp_price,
                                      account->comments + "-Copy");
-        } else if(master_action.action_type == 2) {
+        } else if(master_action.action_type == TRADE_ACTION_SELL) {
             success = slave_trade.Sell(allocated_lots, master_action.symbol,
                                       master_action.sl_price, master_action.tp_price,
                                       account->comments + "-Copy");
@@ -555,11 +555,11 @@ bool CMultiAccountManager::AllocateTradeToSlaves(STradeAction master_action) {
             ext_action.lot_size = allocated_lots;
             success = ExecuteExternalTrade(account->connection_id, ext_action, account->external_provider);
         } else {
-            if(master_action.action_type == 1) {
+            if(master_action.action_type == TRADE_ACTION_BUY) {
                 success = slave_trade.Buy(allocated_lots, master_action.symbol,
                                          master_action.sl_price, master_action.tp_price,
                                          account->comments + "-Copy");
-            } else if(master_action.action_type == 2) {
+            } else if(master_action.action_type == TRADE_ACTION_SELL) {
                 success = slave_trade.Sell(allocated_lots, master_action.symbol,
                                           master_action.sl_price, master_action.tp_price,
                                           account->comments + "-Copy");
@@ -663,13 +663,13 @@ bool CMultiAccountManager::ExecuteTrade(string account_id, STradeAction action) 
 
     bool result = false;
 
-    if(action.action_type == 1) {
+    if(action.action_type == TRADE_ACTION_BUY) {
         result = trade.Buy(action.lot_size, action.symbol, action.sl_price,
                           action.tp_price, action.comment);
-    } else if(action.action_type == 2) {
+    } else if(action.action_type == TRADE_ACTION_SELL) {
         result = trade.Sell(action.lot_size, action.symbol, action.sl_price,
                            action.tp_price, action.comment);
-    } else if(action.action_type == 3) {
+    } else if(action.action_type == TRADE_ACTION_CLOSE) {
         result = trade.PositionClose(action.magic_number);
     }
 
@@ -690,7 +690,7 @@ bool CMultiAccountManager::ExecuteTrade(string account_id, STradeAction action) 
 bool CMultiAccountManager::ExecuteExternalTrade(string account_id, STradeAction action, string provider) {
     char data[], result[];
     string headers = "Content-Type: application/json\r\n";
-    string action_str = (action.action_type == 1) ? "Buy" : "Sell";
+    string action_str = (action.action_type == TRADE_ACTION_BUY) ? "Buy" : "Sell";
 
     // Find account to check inverse
     bool is_inv = false;
