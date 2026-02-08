@@ -166,6 +166,30 @@ struct TradeDecision {
 };
 
 //+------------------------------------------------------------------+
+//| ENUM_TRADE_ACTION - Standard Trade Actions                       |
+//+------------------------------------------------------------------+
+enum ENUM_TRADE_ACTION {
+   TRADE_ACTION_HOLD = 0,
+   TRADE_ACTION_BUY = 1,
+   TRADE_ACTION_SELL = 2,
+   TRADE_ACTION_CLOSE = 3
+};
+
+//+------------------------------------------------------------------+
+//| STradeAction - Trade Action details                              |
+//+------------------------------------------------------------------+
+struct STradeAction {
+   string           symbol;
+   ENUM_TRADE_ACTION action_type;
+   double           lot_size;
+   double           sl_price;
+   double           tp_price;
+   string           comment;
+   ulong            magic_number;  // Used as ticket for Close operations
+   ENUM_ORDER_TYPE  order_type;
+};
+
+//+------------------------------------------------------------------+
 //| Market Data Structure                                             |
 //+------------------------------------------------------------------+
 struct MarketData {

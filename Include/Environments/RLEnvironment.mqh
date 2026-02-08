@@ -23,13 +23,13 @@ enum ENUM_RL_ACTION {
     RL_ACTION_CLOSE = 3
 };
 
-struct RLState {
+struct RLEnvState {
     double features[128];
     int featureCount;
 };
 
 struct RLStepResult {
-    RLState nextState;
+    RLEnvState nextState;
     double reward;
     bool done;
     string info;
@@ -71,7 +71,7 @@ public:
         delete m_vwap;
     }
 
-    RLState Reset() {
+    RLEnvState Reset() {
         m_currentStep = 0;
         m_lastEquity = AccountInfoDouble(ACCOUNT_EQUITY);
         return GetState();
@@ -91,8 +91,8 @@ public:
     }
 
 private:
-    RLState GetState() {
-        RLState state;
+    RLEnvState GetState() {
+        RLEnvState state;
         ArrayInitialize(state.features, 0);
 
         UnifiedMarketState contextState = m_context->Analyze();
