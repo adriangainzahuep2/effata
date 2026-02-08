@@ -284,7 +284,7 @@ void OnTick()
     if(decision.action != NO_SIGNAL && decision.confidence >= InpConfidenceThreshold) {
         STradeAction mam_action;
         mam_action.symbol = _Symbol;
-        mam_action.action_type = (decision.action == BUY_SIGNAL) ? 1 : 2;
+        mam_action.action_type = (decision.action == BUY_SIGNAL) ? TRADE_ACTION_BUY : TRADE_ACTION_SELL;
         mam_action.lot_size = decision.positionSize;
         mam_action.sl_price = decision.stopLoss;
         mam_action.tp_price = decision.takeProfit;
