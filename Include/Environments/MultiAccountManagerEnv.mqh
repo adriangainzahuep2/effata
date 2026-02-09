@@ -31,6 +31,26 @@ enum ENUM_ACCOUNT_MODE {
     ACCOUNT_MODE_COPY_TRADING
 };
 
+// Trade Action Types
+#define TRADE_ACTION_HOLD  0
+#define TRADE_ACTION_BUY   1
+#define TRADE_ACTION_SELL  2
+#define TRADE_ACTION_CLOSE 3
+
+//+------------------------------------------------------------------+
+//| STradeAction - Trade Action Details                              |
+//+------------------------------------------------------------------+
+struct STradeAction {
+    string                   symbol;
+    int                      action_type;
+    double                   lot_size;
+    double                   sl_price;
+    double                   tp_price;
+    int                      magic_number;
+    string                   comment;
+    ENUM_ORDER_TYPE          order_type;
+};
+
 //+------------------------------------------------------------------+
 //| SAccountConnection - Individual Account Configuration            |
 //+------------------------------------------------------------------+
@@ -165,6 +185,7 @@ private:
     int                      m_successful_allocations;
 
     // Master-Slave Configuration
+    bool                     m_is_master_slave_mode;
     bool                     m_enable_master_trades;
     bool                     m_enable_slave_sync;
     double                   m_max_lot_allocation;
@@ -470,11 +491,24 @@ bool CMultiAccountManager::DisconnectAllAccounts() {
 bool CMultiAccountManager::ExecuteMasterTrade(STradeAction action) {
     if(!m_enable_master_trades) return false;
 
-    bool result = m_master_trade.Buy(action.lot_size, action.symbol, action.sl_price,
-                                     action.tp_price, action.comment);
+    if(action.action_type == TRADE_ACTION_HOLD) {
+        Print("Master trade: HOLD - no action taken for ", action.symbol);
+        return true;
+    }
+
+    bool result = false;
+    if(action.action_type == TRADE_ACTION_BUY) {
+        result = m_master_trade.Buy(action.lot_size, action.symbol, action.sl_price,
+                                  action.tp_price, action.comment);
+    } else if(action.action_type == TRADE_ACTION_SELL) {
+        result = m_master_trade.Sell(action.lot_size, action.symbol, action.sl_price,
+                                   action.tp_price, action.comment);
+    } else if(action.action_type == TRADE_ACTION_CLOSE) {
+        result = m_master_trade.PositionClose(action.symbol);
+    }
 
     if(result) {
-        Print("Master trade executed: ", action.symbol, " ", action.lot_size, " lots");
+        Print("Master trade executed: ", action.symbol, " Action: ", action.action_type, " ", action.lot_size, " lots");
 
         if(m_is_master_slave_mode) {
             AllocateTradeToSlaves(action);
@@ -540,29 +574,21 @@ bool CMultiAccountManager::AllocateTradeToSlaves(STradeAction master_action) {
         CTrade slave_trade;
         bool success = false;
 
-        if(master_action.action_type == 1) {
-            success = slave_trade.Buy(allocated_lots, master_action.symbol,
-                                     master_action.sl_price, master_action.tp_price,
-                                     account->comments + "-Copy");
-        } else if(master_action.action_type == 2) {
-            success = slave_trade.Sell(allocated_lots, master_action.symbol,
-                                      master_action.sl_price, master_action.tp_price,
-                                      account->comments + "-Copy");
-        }
-
         if(account->is_external) {
             STradeAction ext_action = master_action;
             ext_action.lot_size = allocated_lots;
             success = ExecuteExternalTrade(account->connection_id, ext_action, account->external_provider);
         } else {
-            if(master_action.action_type == 1) {
+            if(master_action.action_type == TRADE_ACTION_BUY) {
                 success = slave_trade.Buy(allocated_lots, master_action.symbol,
                                          master_action.sl_price, master_action.tp_price,
                                          account->comments + "-Copy");
-            } else if(master_action.action_type == 2) {
+            } else if(master_action.action_type == TRADE_ACTION_SELL) {
                 success = slave_trade.Sell(allocated_lots, master_action.symbol,
                                           master_action.sl_price, master_action.tp_price,
                                           account->comments + "-Copy");
+            } else if(master_action.action_type == TRADE_ACTION_CLOSE) {
+                success = slave_trade.PositionClose(master_action.symbol);
             }
         }
 
@@ -573,7 +599,11 @@ bool CMultiAccountManager::AllocateTradeToSlaves(STradeAction master_action) {
             allocation->slave_tickets.Add(slave_ticket);
             allocation->total_allocated += allocated_lots;
 
-            account->current_positions++;
+            if(master_action.action_type == TRADE_ACTION_CLOSE)
+                account->current_positions = MathMax(0, account->current_positions - 1);
+            else
+                account->current_positions++;
+
             account->last_activity = TimeCurrent();
             m_successful_allocations++;
 
@@ -643,6 +673,10 @@ bool CMultiAccountManager::ExecuteTrade(string account_id, STradeAction action) 
         return false;
     }
 
+    if(account->is_external) {
+        return ExecuteExternalTrade(account_id, action, account->external_provider);
+    }
+
     if(account->status != ACCOUNT_STATUS_CONNECTED) {
         Print("Account not connected: ", account_id);
         return false;
@@ -653,7 +687,12 @@ bool CMultiAccountManager::ExecuteTrade(string account_id, STradeAction action) 
         return false;
     }
 
-    if(account->current_positions >= account->max_positions) {
+    if(action.action_type == TRADE_ACTION_HOLD) {
+        Print("Trade: HOLD - no action taken for ", action.symbol, " on account ", account_id);
+        return true;
+    }
+
+    if(action.action_type != TRADE_ACTION_CLOSE && account->current_positions >= account->max_positions) {
         Print("Max positions reached for account: ", account_id);
         return false;
     }
@@ -663,18 +702,22 @@ bool CMultiAccountManager::ExecuteTrade(string account_id, STradeAction action) 
 
     bool result = false;
 
-    if(action.action_type == 1) {
+    if(action.action_type == TRADE_ACTION_BUY) {
         result = trade.Buy(action.lot_size, action.symbol, action.sl_price,
                           action.tp_price, action.comment);
-    } else if(action.action_type == 2) {
+    } else if(action.action_type == TRADE_ACTION_SELL) {
         result = trade.Sell(action.lot_size, action.symbol, action.sl_price,
                            action.tp_price, action.comment);
-    } else if(action.action_type == 3) {
-        result = trade.PositionClose(action.magic_number);
+    } else if(action.action_type == TRADE_ACTION_CLOSE) {
+        result = trade.PositionClose(action.symbol);
     }
 
     if(result) {
-        account->current_positions++;
+        if(action.action_type == TRADE_ACTION_CLOSE)
+            account->current_positions = MathMax(0, account->current_positions - 1);
+        else
+            account->current_positions++;
+
         account->last_activity = TimeCurrent();
         Print("Trade executed on ", account_id, ": ", action.symbol, " ", action.lot_size, " lots");
     } else {
@@ -690,22 +733,27 @@ bool CMultiAccountManager::ExecuteTrade(string account_id, STradeAction action) 
 bool CMultiAccountManager::ExecuteExternalTrade(string account_id, STradeAction action, string provider) {
     char data[], result[];
     string headers = "Content-Type: application/json\r\n";
-    string action_str = (action.action_type == 1) ? "Buy" : "Sell";
+    string action_str = "Hold";
+    if(action.action_type == TRADE_ACTION_BUY) action_str = "Buy";
+    else if(action.action_type == TRADE_ACTION_SELL) action_str = "Sell";
+    else if(action.action_type == TRADE_ACTION_CLOSE) action_str = "Close";
 
     // Find account to check inverse
     bool is_inv = false;
     double max_s = 100.0;
     for(int i=0; i<m_accounts.Total(); i++) {
         SAccountConnection *acc = m_accounts.At(i);
-        if(acc.connection_id == account_id) {
-            is_inv = acc.is_inverse;
-            max_s = acc.max_lot_size;
+        if(acc != NULL && acc->connection_id == account_id) {
+            is_inv = acc->is_inverse;
+            max_s = acc->max_lot_size;
             break;
         }
     }
 
     string payload = StringFormat("{\"account_id\":\"%s\", \"provider\":\"%s\", \"symbol\":\"%s\", \"action\":\"%s\", \"quantity\":%f, \"is_inverse\":%s, \"max_size_limit\":%f}",
                                  account_id, provider, action.symbol, action_str, action.lot_size, (is_inv?"true":"false"), max_s);
+
+    StringToCharArray(payload, data, 0, WHOLE_ARRAY);
 
     string url = "http://localhost:8000/execute_trade";
     int res = WebRequest("POST", url, headers, 5000, data, result, headers);
