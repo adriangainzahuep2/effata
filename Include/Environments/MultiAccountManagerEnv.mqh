@@ -32,10 +32,16 @@ enum ENUM_ACCOUNT_MODE {
 };
 
 // Trade Action Types
-#define TRADE_ACTION_HOLD  0
-#define TRADE_ACTION_BUY   1
-#define TRADE_ACTION_SELL  2
-#define TRADE_ACTION_CLOSE 3
+#define TRADE_ACTION_HOLD              0
+#define TRADE_ACTION_BUY               1
+#define TRADE_ACTION_SELL              2
+#define TRADE_ACTION_CLOSE             3
+#define TRADE_ACTION_BUY_LIMIT         4
+#define TRADE_ACTION_SELL_LIMIT        5
+#define TRADE_ACTION_BUY_STOP          6
+#define TRADE_ACTION_SELL_STOP         7
+#define TRADE_ACTION_BUY_STOP_LIMIT    8
+#define TRADE_ACTION_SELL_STOP_LIMIT   9
 
 //+------------------------------------------------------------------+
 //| STradeAction - Trade Action Details                              |
@@ -44,6 +50,8 @@ struct STradeAction {
     string                   symbol;
     int                      action_type;
     double                   lot_size;
+    double                   price;            // Entry price for pending orders
+    double                   stop_limit_price; // For Stop Limit orders
     double                   sl_price;
     double                   tp_price;
     int                      magic_number;
@@ -505,6 +513,24 @@ bool CMultiAccountManager::ExecuteMasterTrade(STradeAction action) {
                                    action.tp_price, action.comment);
     } else if(action.action_type == TRADE_ACTION_CLOSE) {
         result = m_master_trade.PositionClose(action.symbol);
+    } else if(action.action_type == TRADE_ACTION_BUY_LIMIT) {
+        result = m_master_trade.BuyLimit(action.lot_size, action.price, action.symbol,
+                                       action.sl_price, action.tp_price, ORDER_TIME_GTC, 0, action.comment);
+    } else if(action.action_type == TRADE_ACTION_SELL_LIMIT) {
+        result = m_master_trade.SellLimit(action.lot_size, action.price, action.symbol,
+                                        action.sl_price, action.tp_price, ORDER_TIME_GTC, 0, action.comment);
+    } else if(action.action_type == TRADE_ACTION_BUY_STOP) {
+        result = m_master_trade.BuyStop(action.lot_size, action.price, action.symbol,
+                                      action.sl_price, action.tp_price, ORDER_TIME_GTC, 0, action.comment);
+    } else if(action.action_type == TRADE_ACTION_SELL_STOP) {
+        result = m_master_trade.SellStop(action.lot_size, action.price, action.symbol,
+                                       action.sl_price, action.tp_price, ORDER_TIME_GTC, 0, action.comment);
+    } else if(action.action_type == TRADE_ACTION_BUY_STOP_LIMIT) {
+        result = m_master_trade.BuyStopLimit(action.lot_size, action.price, action.stop_limit_price, action.symbol,
+                                           action.sl_price, action.tp_price, ORDER_TIME_GTC, 0, action.comment);
+    } else if(action.action_type == TRADE_ACTION_SELL_STOP_LIMIT) {
+        result = m_master_trade.SellStopLimit(action.lot_size, action.price, action.stop_limit_price, action.symbol,
+                                            action.sl_price, action.tp_price, ORDER_TIME_GTC, 0, action.comment);
     }
 
     if(result) {
@@ -589,6 +615,24 @@ bool CMultiAccountManager::AllocateTradeToSlaves(STradeAction master_action) {
                                           account->comments + "-Copy");
             } else if(master_action.action_type == TRADE_ACTION_CLOSE) {
                 success = slave_trade.PositionClose(master_action.symbol);
+            } else if(master_action.action_type == TRADE_ACTION_BUY_LIMIT) {
+                success = slave_trade.BuyLimit(allocated_lots, master_action.price, master_action.symbol,
+                                              master_action.sl_price, master_action.tp_price, ORDER_TIME_GTC, 0, account->comments + "-Copy");
+            } else if(master_action.action_type == TRADE_ACTION_SELL_LIMIT) {
+                success = slave_trade.SellLimit(allocated_lots, master_action.price, master_action.symbol,
+                                               master_action.sl_price, master_action.tp_price, ORDER_TIME_GTC, 0, account->comments + "-Copy");
+            } else if(master_action.action_type == TRADE_ACTION_BUY_STOP) {
+                success = slave_trade.BuyStop(allocated_lots, master_action.price, master_action.symbol,
+                                             master_action.sl_price, master_action.tp_price, ORDER_TIME_GTC, 0, account->comments + "-Copy");
+            } else if(master_action.action_type == TRADE_ACTION_SELL_STOP) {
+                success = slave_trade.SellStop(allocated_lots, master_action.price, master_action.symbol,
+                                              master_action.sl_price, master_action.tp_price, ORDER_TIME_GTC, 0, account->comments + "-Copy");
+            } else if(master_action.action_type == TRADE_ACTION_BUY_STOP_LIMIT) {
+                success = slave_trade.BuyStopLimit(allocated_lots, master_action.price, master_action.stop_limit_price, master_action.symbol,
+                                                  master_action.sl_price, master_action.tp_price, ORDER_TIME_GTC, 0, account->comments + "-Copy");
+            } else if(master_action.action_type == TRADE_ACTION_SELL_STOP_LIMIT) {
+                success = slave_trade.SellStopLimit(allocated_lots, master_action.price, master_action.stop_limit_price, master_action.symbol,
+                                                   master_action.sl_price, master_action.tp_price, ORDER_TIME_GTC, 0, account->comments + "-Copy");
             }
         }
 
@@ -710,6 +754,24 @@ bool CMultiAccountManager::ExecuteTrade(string account_id, STradeAction action) 
                            action.tp_price, action.comment);
     } else if(action.action_type == TRADE_ACTION_CLOSE) {
         result = trade.PositionClose(action.symbol);
+    } else if(action.action_type == TRADE_ACTION_BUY_LIMIT) {
+        result = trade.BuyLimit(action.lot_size, action.price, action.symbol,
+                               action.sl_price, action.tp_price, ORDER_TIME_GTC, 0, action.comment);
+    } else if(action.action_type == TRADE_ACTION_SELL_LIMIT) {
+        result = trade.SellLimit(action.lot_size, action.price, action.symbol,
+                                action.sl_price, action.tp_price, ORDER_TIME_GTC, 0, action.comment);
+    } else if(action.action_type == TRADE_ACTION_BUY_STOP) {
+        result = trade.BuyStop(action.lot_size, action.price, action.symbol,
+                              action.sl_price, action.tp_price, ORDER_TIME_GTC, 0, action.comment);
+    } else if(action.action_type == TRADE_ACTION_SELL_STOP) {
+        result = trade.SellStop(action.lot_size, action.price, action.symbol,
+                               action.sl_price, action.tp_price, ORDER_TIME_GTC, 0, action.comment);
+    } else if(action.action_type == TRADE_ACTION_BUY_STOP_LIMIT) {
+        result = trade.BuyStopLimit(action.lot_size, action.price, action.stop_limit_price, action.symbol,
+                                   action.sl_price, action.tp_price, ORDER_TIME_GTC, 0, action.comment);
+    } else if(action.action_type == TRADE_ACTION_SELL_STOP_LIMIT) {
+        result = trade.SellStopLimit(action.lot_size, action.price, action.stop_limit_price, action.symbol,
+                                    action.sl_price, action.tp_price, ORDER_TIME_GTC, 0, action.comment);
     }
 
     if(result) {
@@ -737,6 +799,12 @@ bool CMultiAccountManager::ExecuteExternalTrade(string account_id, STradeAction 
     if(action.action_type == TRADE_ACTION_BUY) action_str = "Buy";
     else if(action.action_type == TRADE_ACTION_SELL) action_str = "Sell";
     else if(action.action_type == TRADE_ACTION_CLOSE) action_str = "Close";
+    else if(action.action_type == TRADE_ACTION_BUY_LIMIT) action_str = "Buy Limit";
+    else if(action.action_type == TRADE_ACTION_SELL_LIMIT) action_str = "Sell Limit";
+    else if(action.action_type == TRADE_ACTION_BUY_STOP) action_str = "Buy Stop";
+    else if(action.action_type == TRADE_ACTION_SELL_STOP) action_str = "Sell Stop";
+    else if(action.action_type == TRADE_ACTION_BUY_STOP_LIMIT) action_str = "Buy Stop Limit";
+    else if(action.action_type == TRADE_ACTION_SELL_STOP_LIMIT) action_str = "Sell Stop Limit";
 
     // Find account to check inverse
     bool is_inv = false;
@@ -750,8 +818,8 @@ bool CMultiAccountManager::ExecuteExternalTrade(string account_id, STradeAction 
         }
     }
 
-    string payload = StringFormat("{\"account_id\":\"%s\", \"provider\":\"%s\", \"symbol\":\"%s\", \"action\":\"%s\", \"quantity\":%f, \"is_inverse\":%s, \"max_size_limit\":%f}",
-                                 account_id, provider, action.symbol, action_str, action.lot_size, (is_inv?"true":"false"), max_s);
+    string payload = StringFormat("{\"account_id\":\"%s\", \"provider\":\"%s\", \"symbol\":\"%s\", \"action\":\"%s\", \"quantity\":%f, \"price\":%f, \"stop_limit_price\":%f, \"is_inverse\":%s, \"max_size_limit\":%f}",
+                                 account_id, provider, action.symbol, action_str, action.lot_size, action.price, action.stop_limit_price, (is_inv?"true":"false"), max_s);
 
     StringToCharArray(payload, data, 0, WHOLE_ARRAY);
 
