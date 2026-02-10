@@ -499,11 +499,6 @@ bool CMultiAccountManager::DisconnectAllAccounts() {
 bool CMultiAccountManager::ExecuteMasterTrade(STradeAction action) {
     if(!m_enable_master_trades) return false;
 
-    if(action.action_type == TRADE_ACTION_HOLD) {
-        Print("Master trade: HOLD - no action taken for ", action.symbol);
-        return true;
-    }
-
     bool result = false;
     if(action.action_type == TRADE_ACTION_BUY) {
         result = m_master_trade.Buy(action.lot_size, action.symbol, action.sl_price,
@@ -739,6 +734,10 @@ bool CMultiAccountManager::ExecuteTrade(string account_id, STradeAction action) 
     if(action.action_type != TRADE_ACTION_CLOSE && account->current_positions >= account->max_positions) {
         Print("Max positions reached for account: ", account_id);
         return false;
+    }
+
+    if(account->is_external) {
+        return ExecuteExternalTrade(account_id, action, account->external_provider);
     }
 
     CTrade trade;
